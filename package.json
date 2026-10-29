@@ -1,0 +1,98 @@
+{
+  "name": "marco-gastos",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Gastos, ingresos y presupuestos mensuales en tu dispositivo, sin cuenta y sin conexión.",
+  "author": "Marco Pescador",
+  "license": "AGPL-3.0-only",
+  "homepage": "https://peskysa.github.io/marco-gastos/",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Peskysa/marco-gastos.git"
+  },
+  "main": "desktop/main.cjs",
+  "scripts": {
+    "test": "node --test tests/core.test.cjs",
+    "build:web": "node scripts/build.cjs",
+    "start": "node scripts/serve.cjs",
+    "test:browser": "node tests/browser.cjs",
+    "assets": "node scripts/assets.cjs",
+    "desktop": "electron .",
+    "build:desktop": "electron-builder --publish never"
+  },
+  "devDependencies": {
+    "electron": "44.7.0",
+    "electron-builder": "26.15.3",
+    "playwright": "1.64.1",
+    "sharp": "0.34.5"
+  },
+  "build": {
+    "appId": "io.github.peskysa.marcogastos",
+    "productName": "Marco Gastos",
+    "directories": {
+      "output": "dist/desktop",
+      "buildResources": "assets"
+    },
+    "files": [
+      "desktop/main.cjs",
+      "dist/web/**/*",
+      "assets/icon-512.png",
+      "LICENSE",
+      "NOTICE",
+      "THIRD_PARTY.md",
+      "licenses/**/*",
+      "docs/**/*"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "assets/icon-512.png",
+      "signExecutable": false
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "artifactName": "Marco-Gastos-Windows-Instalador.exe"
+    },
+    "portable": {
+      "artifactName": "Marco-Gastos-Portable.exe"
+    },
+    "linux": {
+      "target": [
+        {
+          "target": "deb",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "tar.gz",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "assets/icon-512.png",
+      "category": "Office",
+      "maintainer": "Marco Pescador",
+      "synopsis": "Gastos e ingresos locales con presupuestos mensuales",
+      "artifactName": "Marco-Gastos-Linux-Portable.${ext}"
+    },
+    "deb": {
+      "artifactName": "Marco-Gastos-Linux-amd64.deb"
+    }
+  }
+}

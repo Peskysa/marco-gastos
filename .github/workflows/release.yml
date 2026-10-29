@@ -1,0 +1,191 @@
+name: Compilar, verificar y publicar
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: pnpm/action-setup@v4
+        with:
+          version: '11.25.0'
+          run_install: false
+      - run: pnpm install --frozen-lockfile
+      - run: python scripts/distribution.py check
+      - run: pnpm test
+      - run: pnpm build:web
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm test:browser
+      - run: python scripts/packages.py web
+      - uses: actions/upload-artifact@v4
+        with:
+          name: web-assets
+          path: dist/web/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: final-web
+          path: dist/Marco-Gastos-Web.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: browser-report
+          path: test-output/browser-report.json
+  desktop:
+    needs: web
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-22.04]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: pnpm/action-setup@v4
+        with:
+          version: '11.25.0'
+          run_install: false
+      - run: pnpm install --frozen-lockfile
+      - run: node node_modules/electron/install.js
+      - uses: actions/download-artifact@v4
+        with:
+          name: web-assets
+          path: dist/web
+      - run: pnpm test
+      - name: Dependencias gráficas Linux
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y xvfb libgtk-3-0 libnss3 libasound2 libgbm1
+      - run: pnpm build:desktop
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      - name: Probar Windows empaquetado y persistencia
+        if: runner.os == 'Windows'
+        run: node tests/desktop.cjs 'dist/desktop/win-unpacked/Marco Gastos.exe'
+      - name: Probar Linux empaquetado y persistencia
+        if: runner.os == 'Linux'
+        run: xvfb-run -a node tests/desktop.cjs dist/desktop/linux-unpacked/marco-gastos
+      - name: Probar portable y construir Web Portable
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $report = Join-Path $PWD 'test-output/portable-report.json'
+          $process = Start-Process -FilePath (Resolve-Path 'dist/desktop/Marco-Gastos-Portable.exe') -ArgumentList '--smoke',$report -WindowStyle Hidden -Wait -PassThru
+          if ($process.ExitCode -ne 0 -or !(Test-Path $report)) { throw 'El portable no ha arrancado' }
+          if (!(Get-Content $report | ConvertFrom-Json).ready) { throw 'La interfaz del portable no ha cargado' }
+          python -m pip install pyinstaller==6.22.3
+          python scripts/runtime_notices.py
+          python -m PyInstaller --noconfirm --onefile --windowed --name Marco-Gastos-Web-Portable --add-data 'dist/web;dist/web' --add-data 'licenses;licenses' scripts/portable_web.py
+          python scripts/check_portable.py dist/Marco-Gastos-Web-Portable.exe
+          Copy-Item dist/Marco-Gastos-Web-Portable.exe dist/desktop/
+      - run: python scripts/packages.py desktop
+      - uses: actions/upload-artifact@v4
+        with:
+          name: final-${{ runner.os }}
+          path: |
+            dist/desktop/Marco-Gastos-*.exe
+            dist/desktop/Marco-Gastos-*.deb
+            dist/desktop/Marco-Gastos-*.tar.gz
+          if-no-files-found: error
+      - name: Avisos del entorno portable
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: runtime-notices
+          path: licenses/runtime/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: desktop-report-${{ runner.os }}
+          path: test-output/*report*.json
+  android:
+    needs: web
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: web-assets
+          path: dist/web
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+          log-accepted-android-sdk-licenses: false
+      - run: sdkmanager 'platforms;android-36' 'build-tools;36.0.0'
+      - uses: gradle/actions/setup-gradle@v6.4.0
+        with:
+          gradle-version: '8.13'
+      - name: Compilar, firmar y verificar Android
+        env:
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          ANDROID_KEYSTORE: ${{ secrets.ANDROID_KEYSTORE }}
+        run: |
+          echo "$ANDROID_KEYSTORE" | base64 --decode > android/app/marco-gastos.p12
+          gradle -p android assembleRelease --no-daemon
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs android/app/build/outputs/apk/release/app-release.apk
+          cp android/app/build/outputs/apk/release/app-release.apk dist/Marco-Gastos-Android.apk
+      - run: python scripts/packages.py android
+      - uses: actions/upload-artifact@v4
+        with:
+          name: final-android
+          path: dist/Marco-Gastos-Android.apk
+  publish:
+    needs: [web, desktop, android]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: final-*
+          path: artifacts
+          merge-multiple: true
+      - uses: actions/download-artifact@v4
+        with:
+          name: runtime-notices
+          path: licenses/runtime
+      - run: python scripts/distribution.py finalize artifacts
+      - name: Publicar conjunto completo
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          version="$(python -c 'import json; print(json.load(open("project.json"))["version"])')"
+          tag="v$version"
+          if [ "$GITHUB_REF_TYPE" = tag ] && [ "$GITHUB_REF_NAME" != "$tag" ]; then echo 'Etiqueta y versión no coinciden'; exit 1; fi
+          gh release create "$tag" artifacts/* --draft --target "$GITHUB_SHA" --title "Marco Gastos $version" --notes-file "docs/releases/$tag.md"
+          gh release edit "$tag" --draft=false --latest
+  pages:
+    needs: publish
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: web-assets
+          path: web
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: web
+      - uses: actions/deploy-pages@v4
+        id: deployment

@@ -1,0 +1,11 @@
+'use strict';
+const fs=require('node:fs'),path=require('node:path'),cp=require('node:child_process');
+const root=path.resolve(__dirname,'..'),out=path.join(root,'dist/web');
+fs.mkdirSync(out,{recursive:true});
+for(const name of fs.readdirSync(path.join(root,'src')))fs.copyFileSync(path.join(root,'src',name),path.join(out,name));
+fs.cpSync(path.join(root,'assets'),path.join(out,'assets'),{recursive:true});
+for(const name of ['LICENSE','NOTICE','THIRD_PARTY.md'])fs.copyFileSync(path.join(root,name),path.join(out,name));
+fs.cpSync(path.join(root,'licenses'),path.join(out,'licenses'),{recursive:true});
+fs.copyFileSync(path.join(root,'docs/MANUAL.md'),path.join(out,'MANUAL.md'));
+if(fs.existsSync(path.join(root,'.git')))cp.execFileSync('git',['archive','--format=zip','--prefix=marco-gastos/','--output=dist/web/Source.zip','HEAD'],{cwd:root});
+console.log('Web preparada, con licencias, manual y fuentes del commit.');

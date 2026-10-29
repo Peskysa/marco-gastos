@@ -1,0 +1,10 @@
+{
+  "name": "electron-builder",
+  "version": "26.15.3",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/electron-userland/electron-builder.git",
+    "directory": "packages/electron-builder"
+  }
+}

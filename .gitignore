@@ -1,0 +1,16 @@
+node_modules/
+dist/
+test-output/
+.signing/
+*.p12
+*.jks
+*.keystore
+*.env
+android/.gradle/
+android/local.properties
+android/app/build/
+android/build/
+android/app/src/main/assets/
+__pycache__/
+build/
+*.spec
