@@ -1,6 +1,6 @@
 {
   "name": "marco-gastos",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "private": true,
   "description": "Gastos, ingresos y presupuestos mensuales en tu dispositivo, sin cuenta y sin conexión.",
   "author": "Marco Pescador",
